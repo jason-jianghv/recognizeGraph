@@ -1,0 +1,9 @@
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+
+# intermediate image crops
+assets/splash-hero-temp.png
+assets/splash-hero-top.png
