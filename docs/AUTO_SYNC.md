@@ -15,9 +15,12 @@ ssh-add --apple-use-keychain ~/.ssh/id_rsa
 ## 每日自动任务（与 Cursor 无关）
 
 - 时间：每天 **18:00**
-- 脚本：`scripts/daily-sync.sh`
+- LaunchAgent 入口（**纯 ASCII 路径**）：`~/bin/shitu-daily-sync.sh`
+- 实际脚本：`scripts/daily-sync.sh`
 - LaunchAgent：`~/Library/LaunchAgents/com.shitu.daily-sync.plist`
-- 日志：`~/Library/Logs/shitu-daily-sync.log`
+- 日志：`~/Library/Logs/shitu-daily-sync.log`（另有 `.out.log` / `.err.log`）
+
+> 注意：plist 的 `ProgramArguments` 不要写含中文的仓库路径。launchd 会把「识图」弄成乱码，导致 18:00 找不到脚本。应始终经 `~/bin/shitu-daily-sync.sh` 跳转。
 
 流程：
 
@@ -28,6 +31,8 @@ ssh-add --apple-use-keychain ~/.ssh/id_rsa
 ## 手动试跑
 
 ```bash
+~/bin/shitu-daily-sync.sh
+# 或
 "/Users/mac/Desktop/识图/scripts/daily-sync.sh"
 ```
 
