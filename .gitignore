@@ -4,6 +4,37 @@
 .env.*
 !.env.example
 
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Flutter
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.idea/
+app/*.iml
+
+# Flutter SDK hint (local install path not in repo)
+
+# 识别反馈落盘（含用户原图，勿提交）
+server/data/
+
 # intermediate image crops
 assets/splash-hero-temp.png
 assets/splash-hero-top.png
+
+# 本地截图/调试临时文件
+tmp/

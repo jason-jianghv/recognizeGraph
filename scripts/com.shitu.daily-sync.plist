@@ -4,10 +4,15 @@
 <dict>
   <key>Label</key>
   <string>com.shitu.daily-sync</string>
+  <!--
+    注意：ProgramArguments 必须是纯 ASCII 路径。
+    launchd 对含中文的路径会乱码，导致 18:00 任务找不到脚本（exit/打开失败）。
+    实际入口：~/bin/shitu-daily-sync.sh → 再 exec 本仓库 scripts/daily-sync.sh
+  -->
   <key>ProgramArguments</key>
   <array>
     <string>/bin/zsh</string>
-    <string>/Users/mac/Desktop/识图/scripts/daily-sync.sh</string>
+    <string>/Users/mac/bin/shitu-daily-sync.sh</string>
   </array>
   <!-- 每天 18:00 执行；如需改时间，改 Hour / Minute 后重新 load -->
   <key>StartCalendarInterval</key>
@@ -24,6 +29,13 @@
   <key>StandardErrorPath</key>
   <string>/Users/mac/Library/Logs/shitu-daily-sync.err.log</string>
   <key>WorkingDirectory</key>
-  <string>/Users/mac/Desktop/识图</string>
+  <string>/Users/mac/bin</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+    <key>LC_ALL</key>
+    <string>en_US.UTF-8</string>
+  </dict>
 </dict>
 </plist>
