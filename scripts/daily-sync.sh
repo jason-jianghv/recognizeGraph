@@ -49,9 +49,9 @@ fi
 
 FILES="$(
   {
-    git log --since="$SINCE" --name-only --pretty=format: --no-merges 2>/dev/null
-    git diff --name-only HEAD 2>/dev/null
-    git ls-files --others --exclude-standard 2>/dev/null
+    git -c core.quotepath=false log --since="$SINCE" --name-only --pretty=format: --no-merges 2>/dev/null
+    git -c core.quotepath=false diff --name-only HEAD 2>/dev/null
+    git -c core.quotepath=false ls-files --others --exclude-standard 2>/dev/null
   } | sed '/^$/d' | sort -u | sed 's/^/- /'
 )"
 if [[ -z "${FILES// }" ]]; then
