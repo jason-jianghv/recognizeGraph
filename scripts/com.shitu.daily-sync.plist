@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.shitu.daily-sync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/mac/Desktop/识图/scripts/daily-sync.sh</string>
+  </array>
+  <!-- 每天 18:00 执行；如需改时间，改 Hour / Minute 后重新 load -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>18</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/Users/mac/Library/Logs/shitu-daily-sync.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mac/Library/Logs/shitu-daily-sync.err.log</string>
+  <key>WorkingDirectory</key>
+  <string>/Users/mac/Desktop/识图</string>
+</dict>
+</plist>
