@@ -20,9 +20,9 @@ class _HomeShellState extends State<HomeShell> {
     return Scaffold(
       body: IndexedStack(
         index: _index,
-        children: const [
-          ExploreScreen(),
-          SpaceScreen(),
+        children: [
+          const ExploreScreen(),
+          SpaceScreen(isActive: _index == 1),
         ],
       ),
       bottomNavigationBar: ShituBottomBar(

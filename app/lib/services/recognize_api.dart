@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:shitu_app/models/models.dart';
+import 'package:shitu_app/services/api_client.dart';
 
 class RecognizeApiException implements Exception {
   RecognizeApiException(this.message);
@@ -16,33 +17,11 @@ class RecognizeApiException implements Exception {
 }
 
 class RecognizeApi {
-  RecognizeApi({String? baseUrl}) : baseUrl = baseUrl ?? _defaultBaseUrl();
+  RecognizeApi({String? baseUrl}) : baseUrl = baseUrl ?? ApiClient.defaultBaseUrl();
 
   final String baseUrl;
 
   static const _localNetwork = MethodChannel('com.shitu/local_network');
-
-  static bool get _isIosSimulator {
-    if (kIsWeb || !Platform.isIOS) return false;
-    return Platform.environment.containsKey('SIMULATOR_DEVICE_NAME') ||
-        Platform.environment.containsKey('SIMULATOR_HOST_HOME');
-  }
-
-  static String _defaultBaseUrl() {
-    // 真机调试：改成你电脑的局域网地址（必须带 http:// 和端口）
-    const deviceLanBaseUrl = 'http://10.10.211.141:8000';
-
-    // iOS 模拟器与 Mac 共享网络，用本机回环即可
-    if (_isIosSimulator) {
-      return 'http://127.0.0.1:8000';
-    }
-    // Android 模拟器访问电脑用 10.0.2.2；真机走局域网
-    if (!kIsWeb && Platform.isAndroid) {
-      // 若用 Android 模拟器，改回：return 'http://10.0.2.2:8000';
-      return deviceLanBaseUrl;
-    }
-    return deviceLanBaseUrl;
-  }
 
   /// iOS：先走原生 URLSession（会弹「本地网络」并等待授权），再让 Dart HTTP 工作。
   Future<void> _ensureLocalNetworkAccess(Uri healthUri) async {

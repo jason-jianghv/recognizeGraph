@@ -39,6 +39,12 @@
 	<array>
 		<string>_http._tcp.</string>
 	</array>
+	<!-- url_launcher 打开 https 百科链接所需 -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>http</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

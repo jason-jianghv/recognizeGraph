@@ -5,10 +5,14 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shitu_app/models/models.dart';
+import 'package:shitu_app/screens/gallery_crop_screen.dart';
 import 'package:shitu_app/screens/result_screen.dart';
 import 'package:shitu_app/services/recognize_api.dart';
 import 'package:shitu_app/theme/tokens.dart';
+import 'package:shitu_app/utils/image_crop.dart';
+import 'package:shitu_app/utils/viewfinder_geometry.dart';
 import 'package:shitu_app/widgets/common.dart';
+import 'package:shitu_app/widgets/viewfinder_frame.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -33,6 +37,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
   Offset? _focusIndicator; // 预览区内坐标，用于点按对焦动画
   Timer? _focusIndicatorTimer;
   File? _capturedStill; // 拍完/选图后冻结画面，避免识别时摄像头预览卡顿
+  Size? _previewSize; // 取景区尺寸，用于拍后按框裁切
 
   RecognizeCategory _category = RecognizeCategory.animal;
   bool _busy = false;
@@ -330,18 +335,29 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
 
     try {
       final shot = await controller.takePicture();
-      final file = File(shot.path);
+      final raw = File(shot.path);
       if (!mounted) return;
 
-      // 先定格照片并关掉实时预览，识别过程不再刷摄像头
+      final preview = _previewSize ?? MediaQuery.sizeOf(context);
+      final topInset = MediaQuery.paddingOf(context).top;
+      final vf = ViewfinderGeometry.rectInPreview(preview, topInset);
+      final cropped = await cropImageToViewfinder(
+        source: raw,
+        viewportSize: preview,
+        viewfinderInViewport: vf,
+      );
+
+      if (!mounted) return;
+
+      // 先定格裁后图并关掉实时预览，识别过程不再刷摄像头
       setState(() {
         _busy = true;
-        _capturedStill = file;
+        _capturedStill = cropped;
         _focusIndicator = null;
       });
       await _disposeController();
 
-      await _recognizeFile(file);
+      await _recognizeFile(cropped);
     } on CameraException catch (e) {
       if (!mounted) return;
       await _recoverPreviewAfterFailure();
@@ -366,16 +382,23 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     );
     if (x == null || !mounted) return;
 
-    final file = File(x.path);
+    final picked = File(x.path);
+    final cropped = await Navigator.of(context).push<File>(
+      MaterialPageRoute<File>(
+        builder: (_) => GalleryCropScreen(imageFile: picked),
+      ),
+    );
+    if (cropped == null || !mounted) return;
+
     setState(() {
       _busy = true;
-      _capturedStill = file;
+      _capturedStill = cropped;
       _focusIndicator = null;
     });
     await _disposeController();
 
     try {
-      await _recognizeFile(file);
+      await _recognizeFile(cropped);
     } on RecognizeApiException catch (e) {
       if (!mounted) return;
       await _recoverPreviewAfterFailure();
@@ -446,6 +469,9 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final previewSize = Size(constraints.maxWidth, constraints.maxHeight);
+                _previewSize = previewSize;
+                final topInset = MediaQuery.paddingOf(context).top;
+                final vf = ViewfinderGeometry.rectInPreview(previewSize, topInset);
                 final canZoom = _maxZoom - _minZoom > 0.05;
                 return Stack(
                   fit: StackFit.expand,
@@ -479,6 +505,19 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                           ),
                         ),
                       ),
+                    IgnorePointer(
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: vf.left,
+                            top: vf.top,
+                            width: vf.width,
+                            height: vf.height,
+                            child: const ViewfinderCornerFrame(),
+                          ),
+                        ],
+                      ),
+                    ),
                     SafeArea(
                       bottom: false,
                       child: Stack(
@@ -519,15 +558,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                               ),
                             ),
                           ),
-                          const Positioned(
-                            left: 24,
-                            right: 24,
-                            top: 68,
-                            bottom: 24,
-                            child: IgnorePointer(
-                              child: CustomPaint(painter: _CornerFramePainter()),
-                            ),
-                          ),
                           Positioned(
                             left: 24,
                             right: 56,
@@ -536,7 +566,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 const Text(
-                                  '拍摄时请保持主体清晰',
+                                  '把小伙伴放进框里再拍哦',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     color: Colors.white,
@@ -566,7 +596,6 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
                             ),
                           ),
                           if (canZoom && _capturedStill == null)
-                            // 拉杆缩短并垂直居中，避免占满整侧
                             Align(
                               alignment: Alignment.centerRight,
                               child: Padding(
@@ -898,69 +927,6 @@ class _ZoomRailPainter extends CustomPainter {
   bool shouldRepaint(covariant _ZoomRailPainter oldDelegate) {
     return oldDelegate.progress != progress;
   }
-}
-
-class _CornerFramePainter extends CustomPainter {
-  const _CornerFramePainter();
-
-  static const _stroke = 3.0;
-  static const _arm = 28.0;
-  static const _radius = 10.0;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final w = size.width;
-    final h = size.height;
-    final r = _radius;
-    final a = _arm;
-
-    // 左上
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, a)
-        ..lineTo(0, r)
-        ..arcToPoint(Offset(r, 0), radius: Radius.circular(r))
-        ..lineTo(a, 0),
-      paint,
-    );
-    // 右上
-    canvas.drawPath(
-      Path()
-        ..moveTo(w - a, 0)
-        ..lineTo(w - r, 0)
-        ..arcToPoint(Offset(w, r), radius: Radius.circular(r))
-        ..lineTo(w, a),
-      paint,
-    );
-    // 左下
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, h - a)
-        ..lineTo(0, h - r)
-        ..arcToPoint(Offset(r, h), radius: Radius.circular(r), clockwise: false)
-        ..lineTo(a, h),
-      paint,
-    );
-    // 右下
-    canvas.drawPath(
-      Path()
-        ..moveTo(w - a, h)
-        ..lineTo(w - r, h)
-        ..arcToPoint(Offset(w, h - r), radius: Radius.circular(r), clockwise: false)
-        ..lineTo(w, h - a),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _SideAction extends StatelessWidget {

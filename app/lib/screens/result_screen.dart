@@ -49,12 +49,29 @@ class _ResultScreenState extends State<ResultScreen> {
 
   bool get _isNoneOfAbove => _index >= _candidates.length;
 
-  String get _headerTitle =>
-      _isNoneOfAbove ? '以上都不是' : _candidates[_index].name;
+  /// 列表最高可信度仍 < 15%：展示「被难住了」文案
+  bool get _isLowConfidence {
+    if (_candidates.isEmpty) return true;
+    var maxScore = 0.0;
+    for (final c in _candidates) {
+      if (c.score > maxScore) maxScore = c.score;
+    }
+    return maxScore < 0.15;
+  }
 
-  String get _headerSubtitle => _isNoneOfAbove
-      ? '点卡片告诉我们，帮识图认得更准～'
-      : _candidates[_index].oneLiner;
+  String get _headerTitle {
+    if (_isNoneOfAbove) return '以上都不是';
+    if (_isLowConfidence) return '我居然被难住了';
+    return _candidates[_index].name;
+  }
+
+  String get _headerSubtitle {
+    if (_isNoneOfAbove) return '点卡片告诉我们，帮识图认得更准～';
+    if (_isLowConfidence) {
+      return '它可能是「${_candidates[_index].name}」';
+    }
+    return _candidates[_index].oneLiner;
+  }
 
   Future<void> _submitNoneOfAbove() async {
     if (_feedbackSending) return;
@@ -214,6 +231,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       selected: i == _index,
                       sending: _feedbackSending,
                       sent: _feedbackSent,
+                      imageFile: widget.imageFile,
                       onTap: _submitNoneOfAbove,
                     );
                   }
@@ -227,6 +245,7 @@ class _ResultScreenState extends State<ResultScreen> {
                           MaterialPageRoute<void>(
                             builder: (_) => DetailScreen.fromCandidate(
                               c,
+                              category: widget.result.category,
                               localImage: widget.imageFile,
                             ),
                           ),
@@ -244,16 +263,12 @@ class _ResultScreenState extends State<ResultScreen> {
                             width: selected ? 2 : 1,
                           ),
                         ),
-                        // 名称/简介在上方联动；卡片内配图铺满，可信度叠在图上
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(14),
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              _CandidateImage(
-                                imageUrl: c.imageUrl,
-                                fallbackFile: widget.imageFile,
-                              ),
+                              _CandidateImage(imageUrl: c.imageUrl),
                               Positioned(
                                 left: 8,
                                 right: 8,
@@ -312,12 +327,14 @@ class _NoneOfAboveCard extends StatelessWidget {
     required this.selected,
     required this.sending,
     required this.sent,
+    required this.imageFile,
     required this.onTap,
   });
 
   final bool selected;
   final bool sending;
   final bool sent;
+  final File imageFile;
   final VoidCallback onTap;
 
   @override
@@ -329,7 +346,7 @@ class _NoneOfAboveCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(20),
@@ -338,62 +355,68 @@ class _NoneOfAboveCard extends StatelessWidget {
               width: selected ? 2 : 1,
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Text(
-                '以上都不是',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTokens.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                '识别结果都不对？点这里告诉我们',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppTokens.textSecondary,
-                  height: 1.35,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Container(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.file(
+                  imageFile,
+                  fit: BoxFit.cover,
                   width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppTokens.primarySoft,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
-                    child: sending
-                        ? const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: AppTokens.primary,
-                            ),
-                          )
-                        : Icon(
-                            sent ? Icons.check_circle_rounded : Icons.help_outline_rounded,
-                            size: 56,
-                            color: sent ? AppTokens.success : AppTokens.primary,
+                  height: double.infinity,
+                  alignment: Alignment.center,
+                ),
+                // 轻微压暗，保证问号/文案可读
+                const ColoredBox(color: Color(0x33000000)),
+                Center(
+                  child: sending
+                      ? const SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
                           ),
-                  ),
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              sent
+                                  ? Icons.check_circle_rounded
+                                  : Icons.help_outline_rounded,
+                              size: 48,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              sent ? '已收到反馈' : '以上都不是',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                shadows: [
+                                  Shadow(blurRadius: 6, color: Colors.black54),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              sent ? '谢谢你告诉我' : '点一下告诉我们',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.92),
+                                fontSize: 13,
+                                shadows: const [
+                                  Shadow(blurRadius: 6, color: Colors.black54),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                sent ? '已收到反馈' : '点一下上报',
-                style: const TextStyle(
-                  color: AppTokens.textTertiary,
-                  fontSize: 13,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -401,15 +424,11 @@ class _NoneOfAboveCard extends StatelessWidget {
   }
 }
 
-/// 候选卡配图：百科图 → 用户原图 → App logo（居中）
+/// 鉴定卡配图：仅接口返回图；无效/失败时用 App logo（不用用户拍摄图）
 class _CandidateImage extends StatelessWidget {
-  const _CandidateImage({
-    required this.imageUrl,
-    required this.fallbackFile,
-  });
+  const _CandidateImage({required this.imageUrl});
 
   final String imageUrl;
-  final File fallbackFile;
 
   static const _appLogo = 'assets/images/app-logo.png';
 
@@ -479,21 +498,10 @@ class _CandidateImage extends StatelessWidget {
             ),
           );
         },
-        errorBuilder: (context, error, stackTrace) => _photoFallback(),
+        errorBuilder: (context, error, stackTrace) => _logoFallback(),
       );
     }
-    return _photoFallback();
-  }
-
-  Widget _photoFallback() {
-    return Image.file(
-      fallbackFile,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      alignment: Alignment.center,
-      errorBuilder: (context, error, stackTrace) => _logoFallback(),
-    );
+    return _logoFallback();
   }
 
   Widget _logoFallback() {

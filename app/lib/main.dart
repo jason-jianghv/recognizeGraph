@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shitu_app/screens/home_shell.dart';
 import 'package:shitu_app/screens/splash_screen.dart';
 import 'package:shitu_app/state/session_state.dart';
+import 'package:shitu_app/state/voice_preference_state.dart';
 import 'package:shitu_app/theme/app_theme.dart';
 
 void main() {
@@ -15,8 +16,23 @@ class ShituApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => SessionState(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) {
+            final s = SessionState();
+            s.restore();
+            return s;
+          },
+        ),
+        ChangeNotifierProvider(
+          create: (_) {
+            final v = VoicePreferenceState();
+            v.restore();
+            return v;
+          },
+        ),
+      ],
       child: MaterialApp(
         title: '识图',
         debugShowCheckedModeBanner: false,

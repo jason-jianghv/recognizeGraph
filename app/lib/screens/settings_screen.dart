@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shitu_app/screens/about_screen.dart';
+import 'package:shitu_app/screens/voice_preference_screen.dart';
 import 'package:shitu_app/state/session_state.dart';
+import 'package:shitu_app/state/voice_preference_state.dart';
 import 'package:shitu_app/theme/tokens.dart';
 import 'package:shitu_app/widgets/common.dart';
 
@@ -10,6 +12,9 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final voice = context.watch<VoicePreferenceState>();
+    final voiceLabel = VoiceProfiles.metaOf(voice.profile).title;
+
     return Scaffold(
       backgroundColor: AppTokens.bgPage,
       appBar: AppBar(
@@ -25,6 +30,32 @@ class SettingsScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            _tile(
+              context,
+              title: '语音偏好修改',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    voiceLabel,
+                    style: const TextStyle(
+                      color: AppTokens.textTertiary,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_right_rounded),
+                ],
+              ),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const VoicePreferenceScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
             _tile(
               context,
               title: '关于我',
@@ -49,9 +80,9 @@ class SettingsScreen extends StatelessWidget {
               width: double.infinity,
               height: 54,
               child: OutlinedButton(
-                onPressed: () {
-                  context.read<SessionState>().logout();
-                  Navigator.of(context).pop();
+                onPressed: () async {
+                  await context.read<SessionState>().logout();
+                  if (context.mounted) Navigator.of(context).pop();
                 },
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTokens.danger,

@@ -1,18 +1,34 @@
 import logging
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
+from app.db.session import init_db, media_root
+from app.routers.auth import router as auth_router
+from app.routers.history import router as history_router
+from app.routers.me import router as me_router
 from app.routers.recognize import router as recognize_router
+from app.routers.tts import router as tts_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("shitu")
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_db()
+    logger.info("DB ready at %s", media_root() / "shitu.db")
+    yield
+
+
 app = FastAPI(
     title="识图 API",
     description="儿童拍照识物后端（百度智能云图像识别）",
-    version="0.1.0",
+    version="0.2.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -46,6 +62,14 @@ async def log_requests(request: Request, call_next):
 
 
 app.include_router(recognize_router)
+app.include_router(auth_router)
+app.include_router(me_router)
+app.include_router(history_router)
+app.include_router(tts_router)
+
+_media = media_root()
+_media.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(_media)), name="media")
 
 
 @app.get("/health")
