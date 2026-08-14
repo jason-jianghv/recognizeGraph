@@ -63,6 +63,33 @@ abstract final class ViewfinderGeometry {
     );
   }
 
+  /// BoxFit.cover 相对视口的基础缩放（userScale=1 时）
+  static double coverBaseScale(Size viewport, Size imageSize) {
+    return math.max(
+      viewport.width / imageSize.width,
+      viewport.height / imageSize.height,
+    );
+  }
+
+  /// 用户缩放下限：整张图可缩进取景框内（再小无意义），约 0.25～1。
+  /// 解决「主体在角落且已经很大、只能放大导致撑出框」的问题。
+  static double minUserScale({
+    required Size viewport,
+    required Size imageSize,
+    required Rect viewfinder,
+  }) {
+    final base = coverBaseScale(viewport, imageSize);
+    if (base <= 0) return 0.25;
+    final fitVf = math.min(
+          viewfinder.width / imageSize.width,
+          viewfinder.height / imageSize.height,
+        ) /
+        base;
+    return fitVf.clamp(0.25, 1.0);
+  }
+
+  static const double maxUserScale = 4.0;
+
   /// 交互平移缩放后：视口矩形 → 图片像素
   static Rect mapTransformedRectToImage({
     required Size viewport,
@@ -71,11 +98,13 @@ abstract final class ViewfinderGeometry {
     required double userScale,
     required Offset offset,
   }) {
-    final base = math.max(
-      viewport.width / imageSize.width,
-      viewport.height / imageSize.height,
+    final base = coverBaseScale(viewport, imageSize);
+    final minS = minUserScale(
+      viewport: viewport,
+      imageSize: imageSize,
+      viewfinder: viewportRect,
     );
-    final scale = base * userScale.clamp(1.0, 8.0);
+    final scale = base * userScale.clamp(minS, maxUserScale);
     final dispW = imageSize.width * scale;
     final dispH = imageSize.height * scale;
     final left = (viewport.width - dispW) / 2 + offset.dx;
@@ -89,6 +118,45 @@ abstract final class ViewfinderGeometry {
       toImgY(viewportRect.top),
       toImgX(viewportRect.right),
       toImgY(viewportRect.bottom),
+    );
+  }
+
+  /// 限制平移：尽量让取景框落在图片显示区域内；图比框还小时居中。
+  static Offset clampOffset({
+    required Size viewport,
+    required Size imageSize,
+    required Rect viewfinder,
+    required double userScale,
+    required Offset offset,
+  }) {
+    final base = coverBaseScale(viewport, imageSize);
+    final minS = minUserScale(
+      viewport: viewport,
+      imageSize: imageSize,
+      viewfinder: viewfinder,
+    );
+    final scale = base * userScale.clamp(minS, maxUserScale);
+    final dispW = imageSize.width * scale;
+    final dispH = imageSize.height * scale;
+    final centerX = (viewport.width - dispW) / 2;
+    final centerY = (viewport.height - dispH) / 2;
+
+    // 图片显示矩形覆盖取景框：
+    // imgLeft = centerX + dx <= vf.left
+    // imgRight = centerX + dx + dispW >= vf.right
+    var minDx = viewfinder.right - centerX - dispW;
+    var maxDx = viewfinder.left - centerX;
+    var minDy = viewfinder.bottom - centerY - dispH;
+    var maxDy = viewfinder.top - centerY;
+
+    double clampAxis(double v, double minV, double maxV) {
+      if (minV > maxV) return (minV + maxV) / 2;
+      return v.clamp(minV, maxV);
+    }
+
+    return Offset(
+      clampAxis(offset.dx, minDx, maxDx),
+      clampAxis(offset.dy, minDy, maxDy),
     );
   }
 

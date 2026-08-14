@@ -9,7 +9,6 @@ import 'package:shitu_app/screens/gallery_crop_screen.dart';
 import 'package:shitu_app/screens/result_screen.dart';
 import 'package:shitu_app/services/recognize_api.dart';
 import 'package:shitu_app/theme/tokens.dart';
-import 'package:shitu_app/utils/image_crop.dart';
 import 'package:shitu_app/utils/viewfinder_geometry.dart';
 import 'package:shitu_app/widgets/common.dart';
 import 'package:shitu_app/widgets/viewfinder_frame.dart';
@@ -338,16 +337,13 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
       final raw = File(shot.path);
       if (!mounted) return;
 
-      final preview = _previewSize ?? MediaQuery.sizeOf(context);
-      final topInset = MediaQuery.paddingOf(context).top;
-      final vf = ViewfinderGeometry.rectInPreview(preview, topInset);
-      final cropped = await cropImageToViewfinder(
-        source: raw,
-        viewportSize: preview,
-        viewfinderInViewport: vf,
+      // 与相册一致：进对准裁剪页，可缩小/平移，避免角落大主体撑出取景框
+      final cropped = await Navigator.of(context).push<File>(
+        MaterialPageRoute<File>(
+          builder: (_) => GalleryCropScreen(imageFile: raw),
+        ),
       );
-
-      if (!mounted) return;
+      if (cropped == null || !mounted) return;
 
       // 先定格裁后图并关掉实时预览，识别过程不再刷摄像头
       setState(() {

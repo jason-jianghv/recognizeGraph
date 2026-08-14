@@ -8,11 +8,14 @@ from pathlib import Path
 
 from typing import Optional
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.baidu.auth import BaiduAuthError
 from app.baidu.recognize import Category, RecognizeResponse, recognize_image
+from app.db.session import get_db
+from app.services.catalog import upsert_recognize_candidates
 
 router = APIRouter(prefix="/v1", tags=["recognize"])
 
@@ -34,6 +37,7 @@ class FeedbackResponse(BaseModel):
 async def recognize(
     category: Category = Form(..., description="animal | plant | transport"),
     image: UploadFile = File(..., description="任意图片，服务端会转为 JPG 再调百度"),
+    db: Session = Depends(get_db),
 ) -> RecognizeResponse:
     data = await image.read()
     if not data:
@@ -42,7 +46,7 @@ async def recognize(
         raise HTTPException(status_code=400, detail="上传图片过大，请压缩后重试")
 
     try:
-        return await recognize_image(category, data)
+        result = await recognize_image(category, data)
     except BaiduAuthError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     except ValueError as e:
@@ -51,6 +55,15 @@ async def recognize(
         raise HTTPException(status_code=502, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"识别服务异常: {e}") from e
+
+    # 任意可信度候选都回填全局目录（唯一 category+name）；失败不影响识别响应
+    if result.candidates:
+        n = upsert_recognize_candidates(db, result.category, result.candidates)
+        if n:
+            logger.info(
+                "catalog upserted %s rows category=%s", n, result.category.value
+            )
+    return result
 
 
 @router.post("/feedback", response_model=FeedbackResponse)

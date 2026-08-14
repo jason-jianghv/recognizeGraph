@@ -45,17 +45,35 @@ def _ensure_sqlite_columns() -> None:
     if not url.startswith("sqlite"):
         return
     insp = inspect(engine)
-    if "learning_records" not in insp.get_table_names():
-        return
-    cols = {c["name"] for c in insp.get_columns("learning_records")}
-    if "description" not in cols:
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    "ALTER TABLE learning_records "
-                    "ADD COLUMN description TEXT DEFAULT ''"
+    tables = set(insp.get_table_names())
+    if "learning_records" in tables:
+        cols = {c["name"] for c in insp.get_columns("learning_records")}
+        if "description" not in cols:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE learning_records "
+                        "ADD COLUMN description TEXT DEFAULT ''"
+                    )
                 )
-            )
+    if "catalog_species" in tables:
+        cols = {c["name"] for c in insp.get_columns("catalog_species")}
+        if "enrich_status" not in cols:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE catalog_species "
+                        "ADD COLUMN enrich_status VARCHAR(16) DEFAULT ''"
+                    )
+                )
+        if "is_common" not in cols:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE catalog_species "
+                        "ADD COLUMN is_common INTEGER DEFAULT 1"
+                    )
+                )
 
 
 def init_db() -> None:
@@ -63,6 +81,10 @@ def init_db() -> None:
     (_DATA_DIR / "thumbs").mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     _ensure_sqlite_columns()
+    # 延迟导入，避免循环依赖
+    from app.services.catalog_seed import ensure_catalog_seeded
+
+    ensure_catalog_seeded()
 
 
 def get_db() -> Generator[Session, None, None]:

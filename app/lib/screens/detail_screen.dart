@@ -8,6 +8,7 @@ import 'package:shitu_app/models/models.dart';
 import 'package:shitu_app/screens/voice_preference_screen.dart';
 import 'package:shitu_app/services/api_client.dart';
 import 'package:shitu_app/services/history_api.dart';
+import 'package:shitu_app/services/name_en_api.dart';
 import 'package:shitu_app/services/tts_api.dart';
 import 'package:shitu_app/state/session_state.dart';
 import 'package:shitu_app/state/voice_preference_state.dart';
@@ -46,13 +47,27 @@ class DetailScreen extends StatefulWidget {
   final String source;
 
   factory DetailScreen.fromExplore(ExploreItem item) {
+    // 详情页约定（与 fromCandidate 一致）：
+    // - oneLiner 槽位 = 名称下主介绍（可较长）
+    // - description 槽位 =「你可能听过」延伸区
+    // 目录里 one_liner 常为带「…」的短句，description 才是完整简介，不可对调直传。
+    final full = item.description.trim();
+    final short = item.oneLiner.trim();
+    final mainIntro = full.isNotEmpty
+        ? full
+        : (short.isEmpty ? '关于「${item.name}」，我们以后会讲更多……' : short);
+    final heardMore = full.isNotEmpty
+        ? '关于「${item.name}」，以后会讲更多有趣的故事～'
+        : '关于「${item.name}」，我们以后会讲更多……';
     return DetailScreen(
       name: item.name,
-      oneLiner: item.oneLiner,
-      description: item.description,
+      oneLiner: mainIntro,
+      description: heardMore,
       emoji: item.emoji,
+      networkImage: item.imageUrl.trim().isEmpty ? null : item.imageUrl.trim(),
       category: item.category.apiValue,
       candidateId: item.id,
+      baikeUrl: item.baikeUrl,
       source: 'explore',
     );
   }
@@ -87,6 +102,7 @@ class _DetailScreenState extends State<DetailScreen> {
   final _scroll = ScrollController();
   final _player = AudioPlayer();
   final _ttsApi = TtsApi();
+  final _nameEnApi = NameEnApi();
 
   Timer? _dwellTimer;
   StreamSubscription<void>? _completeSub;
@@ -104,6 +120,18 @@ class _DetailScreenState extends State<DetailScreen> {
   Duration _duration = Duration.zero;
   File? _audioFile;
   String? _audioProfile;
+  /// intro = 听介绍；name = 点名字旁双语朗读（仅用于底栏播放器状态）
+  String _audioKind = 'intro';
+
+  /// 名字点读专用缓存（与介绍音频分开，同页同偏好只合成一次）
+  File? _nameAudioFile;
+  String? _nameAudioProfile;
+  String? _nameAudioScript;
+
+  String _nameEn = '';
+  String _nameSpeak = '';
+  bool _nameEnLoading = false;
+  bool _nameSpeakLoading = false;
 
   /// 停留满此时长，或点「听一听」，先到先记（同页一次）
   static const _dwellSeconds = 5;
@@ -145,6 +173,132 @@ class _DetailScreenState extends State<DetailScreen> {
       _dwellTimer = Timer(const Duration(seconds: _dwellSeconds), () {
         if (mounted) _tryRecordLearn(trigger: 'dwell_${_dwellSeconds}s');
       });
+    }
+    _loadNameEn();
+  }
+
+  Future<void> _loadNameEn() async {
+    setState(() => _nameEnLoading = true);
+    try {
+      final r = await _nameEnApi.resolve(widget.name);
+      if (!mounted) return;
+      setState(() {
+        _nameEn = r.nameEn;
+        _nameSpeak = r.speak.isNotEmpty
+            ? r.speak
+            : (r.hasEnglish
+                ? '${widget.name}。${r.nameEn}。'
+                : '${widget.name}。');
+      });
+      _debugNameEnSourceToast(r.source, r.nameEn);
+    } catch (e) {
+      debugPrint('[Detail] name-en failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _nameEn = '';
+        _nameSpeak = '${widget.name}。';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('英文名调试：请求失败 $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _nameEnLoading = false);
+    }
+  }
+
+  void _debugNameEnSourceToast(String source, String nameEn) {
+    final src = source.trim();
+    final String label;
+    switch (src) {
+      case 'lexicon':
+        label = '词表';
+        break;
+      case 'learned':
+        label = '词表（学习回填）';
+        break;
+      case 'translate':
+        label = '机器翻译（已写入词表）';
+        break;
+      case 'translate_cache':
+        label = '机器翻译（缓存）';
+        break;
+      case 'none':
+        label = '未命中（无英文）';
+        break;
+      case 'empty':
+        label = '空名称';
+        break;
+      default:
+        label = src.isEmpty ? '未知' : src;
+    }
+    final en = nameEn.trim();
+    final msg = en.isEmpty
+        ? '英文名调试：来源=$label'
+        : '英文名调试：来源=$label · $en';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 3)),
+    );
+  }
+
+  /// 名字旁喇叭：播「中文。英文。」；不记学习、不展开底栏介绍播放器。
+  /// 同页 + 同语音偏好 + 同播报稿：复用本地临时 MP3，不再请求百度 TTS。
+  Future<void> _onSpeakName() async {
+    if (_nameSpeakLoading) return;
+    final profile = context.read<VoicePreferenceState>().profile.apiValue;
+    final script =
+        _nameSpeak.trim().isEmpty ? '${widget.name}。' : _nameSpeak.trim();
+
+    // 命中本页名字音频缓存 → 直接播
+    if (_nameAudioFile != null &&
+        _nameAudioProfile == profile &&
+        _nameAudioScript == script &&
+        await _nameAudioFile!.exists()) {
+      debugPrint('[Detail] name-tts cache hit path=${_nameAudioFile!.path}');
+      try {
+        await _player.stop();
+        _audioKind = 'name';
+        await _player.play(DeviceFileSource(_nameAudioFile!.path));
+      } catch (e) {
+        debugPrint('[Detail] name-tts cache play failed: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('读名字失败：$e')),
+          );
+        }
+      }
+      return;
+    }
+
+    setState(() => _nameSpeakLoading = true);
+    try {
+      await _player.stop();
+      debugPrint(
+        '[Detail] name-tts synthesize profile=$profile script=$script',
+      );
+      final file = await _ttsApi.synthesizeToFile(
+        name: widget.name,
+        oneLiner: '',
+        voiceProfile: profile,
+        text: script,
+      );
+      if (!mounted) return;
+      _nameAudioFile = file;
+      _nameAudioProfile = profile;
+      _nameAudioScript = script;
+      _audioKind = 'name';
+      await _player.play(DeviceFileSource(file.path));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('读名字失败：$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _nameSpeakLoading = false);
     }
   }
 
@@ -208,9 +362,10 @@ class _DetailScreenState extends State<DetailScreen> {
     if (_ttsLoading) return;
 
     final profile = context.read<VoicePreferenceState>().profile.apiValue;
-    // 已有音频且偏好未变：直接播缓存，不再请求合成
+    // 已有「介绍」音频且偏好未变：直接播缓存，不再请求合成
     if (_audioFile != null &&
         _audioProfile == profile &&
+        _audioKind == 'intro' &&
         await _audioFile!.exists()) {
       setState(() => _playerVisible = true);
       await _playCached();
@@ -231,6 +386,7 @@ class _DetailScreenState extends State<DetailScreen> {
       if (!mounted) return;
       _audioFile = file;
       _audioProfile = profile;
+      _audioKind = 'intro';
       await _player.play(DeviceFileSource(file.path));
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -288,6 +444,10 @@ class _DetailScreenState extends State<DetailScreen> {
       setState(() {
         _audioFile = null;
         _audioProfile = null;
+        _audioKind = 'intro';
+        _nameAudioFile = null;
+        _nameAudioProfile = null;
+        _nameAudioScript = null;
         _playerVisible = false;
         _playing = false;
         _position = Duration.zero;
@@ -382,13 +542,63 @@ class _DetailScreenState extends State<DetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.name,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                widget.name,
+                                style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Material(
+                              color: AppTokens.primarySoft,
+                              shape: const CircleBorder(),
+                              clipBehavior: Clip.antiAlias,
+                              child: InkWell(
+                                onTap: (_nameSpeakLoading || _nameEnLoading)
+                                    ? null
+                                    : _onSpeakName,
+                                child: SizedBox(
+                                  width: 48,
+                                  height: 48,
+                                  child: Center(
+                                    child: _nameSpeakLoading || _nameEnLoading
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                              color: AppTokens.primary,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.volume_up_rounded,
+                                            color: AppTokens.primary,
+                                            size: 26,
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                        if (_nameEn.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            _nameEn,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: AppTokens.primary,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 8),
                         Text(
                           widget.oneLiner,

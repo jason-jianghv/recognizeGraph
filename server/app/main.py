@@ -8,9 +8,11 @@ from fastapi.staticfiles import StaticFiles
 
 from app.db.session import init_db, media_root
 from app.routers.auth import router as auth_router
+from app.routers.catalog import router as catalog_router
 from app.routers.history import router as history_router
 from app.routers.me import router as me_router
 from app.routers.recognize import router as recognize_router
+from app.routers.name_en import router as name_en_router
 from app.routers.tts import router as tts_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -62,10 +64,12 @@ async def log_requests(request: Request, call_next):
 
 
 app.include_router(recognize_router)
+app.include_router(catalog_router)
 app.include_router(auth_router)
 app.include_router(me_router)
 app.include_router(history_router)
 app.include_router(tts_router)
+app.include_router(name_en_router)
 
 _media = media_root()
 _media.mkdir(parents=True, exist_ok=True)

@@ -13,23 +13,31 @@ class TtsApi {
 
   final String baseUrl;
 
-  /// 请求后端合成「名字 + 简介」MP3（超长已在服务端分段拼接）。
+  /// 请求后端合成 MP3。
+  /// - 默认：`name` + `oneLiner` 拼播报稿
+  /// - 若传 [text]：优先作为完整播报稿（如「中文名。English。」）
   Future<File> synthesizeToFile({
     required String name,
     required String oneLiner,
     String voiceProfile = 'a',
+    String? text,
   }) async {
     await ApiClient.ensureLocalNetworkAccess(baseUrl);
     final uri = Uri.parse('$baseUrl/v1/tts');
+    final body = <String, dynamic>{
+      'name': name,
+      'one_liner': oneLiner,
+      'voice_profile': voiceProfile,
+    };
+    final script = text?.trim() ?? '';
+    if (script.isNotEmpty) {
+      body['text'] = script;
+    }
     final resp = await http
         .post(
           uri,
           headers: {'Content-Type': 'application/json; charset=utf-8'},
-          body: jsonEncode({
-            'name': name,
-            'one_liner': oneLiner,
-            'voice_profile': voiceProfile,
-          }),
+          body: jsonEncode(body),
         )
         .timeout(const Duration(seconds: 45));
 

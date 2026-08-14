@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -35,8 +34,15 @@ class _GalleryCropScreenState extends State<GalleryCropScreen> {
   bool _busy = false;
   Size? _viewportSize;
 
-  static const _minScale = 1.0;
-  static const _maxScale = 4.0;
+  static const _maxScale = ViewfinderGeometry.maxUserScale;
+
+  double _minScaleFor(Size viewport, Size imageSize, Rect vf) {
+    return ViewfinderGeometry.minUserScale(
+      viewport: viewport,
+      imageSize: imageSize,
+      viewfinder: vf,
+    );
+  }
 
   @override
   void initState() {
@@ -61,20 +67,13 @@ class _GalleryCropScreenState extends State<GalleryCropScreen> {
     });
   }
 
-  void _clampOffset(Size viewport, Size imageSize) {
-    final base = math.max(
-      viewport.width / imageSize.width,
-      viewport.height / imageSize.height,
-    );
-    final scale = base * _userScale;
-    final dispW = imageSize.width * scale;
-    final dispH = imageSize.height * scale;
-    // 保证取景框始终被图片覆盖：至少覆盖整个视口（cover）
-    final maxDx = math.max(0.0, (dispW - viewport.width) / 2);
-    final maxDy = math.max(0.0, (dispH - viewport.height) / 2);
-    _offset = Offset(
-      _offset.dx.clamp(-maxDx, maxDx),
-      _offset.dy.clamp(-maxDy, maxDy),
+  void _clampOffset(Size viewport, Size imageSize, Rect vf) {
+    _offset = ViewfinderGeometry.clampOffset(
+      viewport: viewport,
+      imageSize: imageSize,
+      viewfinder: vf,
+      userScale: _userScale,
+      offset: _offset,
     );
   }
 
@@ -132,6 +131,9 @@ class _GalleryCropScreenState extends State<GalleryCropScreen> {
                 _viewportSize = viewport;
                 final imageSize = _imageSize;
                 final vf = ViewfinderGeometry.rectInPreview(viewport, topInset);
+                final minScale = imageSize == null
+                    ? 0.25
+                    : _minScaleFor(viewport, imageSize, vf);
 
                 return Stack(
                   fit: StackFit.expand,
@@ -151,10 +153,10 @@ class _GalleryCropScreenState extends State<GalleryCropScreen> {
                               onScaleUpdate: (d) {
                                 setState(() {
                                   _userScale =
-                                      (_startScale * d.scale).clamp(_minScale, _maxScale);
+                                      (_startScale * d.scale).clamp(minScale, _maxScale);
                                   final delta = d.focalPoint - (_focalViewport ?? d.focalPoint);
                                   _offset = _startOffset + delta;
-                                  _clampOffset(viewport, imageSize);
+                                  _clampOffset(viewport, imageSize, vf);
                                 });
                               },
                               child: _buildTransformedImage(viewport, imageSize),
@@ -189,15 +191,15 @@ class _GalleryCropScreenState extends State<GalleryCropScreen> {
                             width: 40,
                             height: 208,
                             child: _CropZoomRail(
-                              value: _userScale,
-                              min: _minScale,
+                              value: _userScale.clamp(minScale, _maxScale),
+                              min: minScale,
                               max: _maxScale,
                               onChanged: _busy
                                   ? null
                                   : (v) {
                                       setState(() {
-                                        _userScale = v;
-                                        _clampOffset(viewport, imageSize);
+                                        _userScale = v.clamp(minScale, _maxScale);
+                                        _clampOffset(viewport, imageSize, vf);
                                       });
                                     },
                             ),
@@ -209,7 +211,7 @@ class _GalleryCropScreenState extends State<GalleryCropScreen> {
                       right: 56,
                       bottom: 16,
                       child: Text(
-                        '拖动图片，把要认的小伙伴放进框里',
+                        '拖动或缩小图片，把要认的小伙伴完整放进框里',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.95),
@@ -310,10 +312,7 @@ class _GalleryCropScreenState extends State<GalleryCropScreen> {
   }
 
   Widget _buildTransformedImage(Size viewport, Size imageSize) {
-    final base = math.max(
-      viewport.width / imageSize.width,
-      viewport.height / imageSize.height,
-    );
+    final base = ViewfinderGeometry.coverBaseScale(viewport, imageSize);
     final scale = base * _userScale;
     final dispW = imageSize.width * scale;
     final dispH = imageSize.height * scale;

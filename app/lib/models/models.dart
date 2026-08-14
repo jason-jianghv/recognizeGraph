@@ -58,6 +58,9 @@ class ExploreItem {
     required this.emoji,
     required this.category,
     this.description = '',
+    this.imageUrl = '',
+    this.baikeUrl = '',
+    this.catalogId,
   });
 
   final String id;
@@ -66,4 +69,8 @@ class ExploreItem {
   final String emoji;
   final RecognizeCategory category;
   final String description;
+  final String imageUrl;
+  final String baikeUrl;
+  /// 服务端 catalog_species.id；用于打开详情时补齐简介
+  final int? catalogId;
 }
