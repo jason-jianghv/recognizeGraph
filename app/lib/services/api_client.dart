@@ -9,7 +9,7 @@ abstract final class ApiClient {
   static const _localNetwork = MethodChannel('com.shitu/local_network');
 
   /// 真机调试：改成你电脑的局域网地址（必须带 http:// 和端口）
-  static const deviceLanBaseUrl = 'http://10.10.211.141:8000';
+  static const deviceLanBaseUrl = 'http://10.10.211.148:8000';
 
   static bool get _isIosSimulator {
     if (kIsWeb || !Platform.isIOS) return false;

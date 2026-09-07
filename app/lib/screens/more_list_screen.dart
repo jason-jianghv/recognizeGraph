@@ -33,6 +33,8 @@ class _MoreListScreenState extends State<MoreListScreen> {
 
   static const _pageSize = 40;
 
+  bool get _hasMore => _total == 0 || _items.length < _total;
+
   @override
   void initState() {
     super.initState();
@@ -48,12 +50,23 @@ class _MoreListScreenState extends State<MoreListScreen> {
   }
 
   void _onScroll() {
-    if (_loadingMore || _loading) return;
-    if (_items.length >= _total && _total > 0) return;
-    if (!_scroll.hasClients) return;
-    if (_scroll.position.pixels > _scroll.position.maxScrollExtent - 240) {
-      _load(reset: false);
-    }
+    if (!_shouldLoadMore()) return;
+    _load(reset: false);
+  }
+
+  bool _shouldLoadMore() {
+    if (_loadingMore || _loading || !_hasMore) return false;
+    if (!_scroll.hasClients) return false;
+    final pos = _scroll.position;
+    return pos.pixels >= pos.maxScrollExtent - 240;
+  }
+
+  /// 加载完成后若仍贴底且还有下一页，自动续载（避免只靠 scroll 事件漏触发）
+  void _maybeContinueLoading() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_shouldLoadMore()) _load(reset: false);
+    });
   }
 
   Future<void> _load({required bool reset}) async {
@@ -65,8 +78,7 @@ class _MoreListScreenState extends State<MoreListScreen> {
         _page = 0;
       });
     } else {
-      if (_loadingMore) return;
-      if (_items.length >= _total && _total > 0) return;
+      if (_loadingMore || !_hasMore) return;
       setState(() => _loadingMore = true);
     }
 
@@ -76,6 +88,8 @@ class _MoreListScreenState extends State<MoreListScreen> {
         category: widget.category,
         page: nextPage,
         pageSize: _pageSize,
+        // 全量：常规在前，生僻/新种子在后（服务端 order by is_common）
+        commonOnly: false,
       );
       if (!mounted) return;
       setState(() {
@@ -87,6 +101,9 @@ class _MoreListScreenState extends State<MoreListScreen> {
         _loadingMore = false;
         _error = null;
       });
+      if (!reset && page.items.isNotEmpty) {
+        _maybeContinueLoading();
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -149,23 +166,38 @@ class _MoreListScreenState extends State<MoreListScreen> {
       );
     }
 
+    final showFooter = _loadingMore || (!_hasMore && _items.isNotEmpty);
     return ListView.separated(
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: _items.length + (_loadingMore ? 1 : 0),
+      itemCount: _items.length + (showFooter ? 1 : 0),
       separatorBuilder: (_, index) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
         if (i >= _items.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
+          if (_loadingMore) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: AppTokens.primary,
+                  ),
+                ),
+              ),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
             child: Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: AppTokens.primary,
+              child: Text(
+                '已经全部看完啦（共 $_total 个）',
+                style: const TextStyle(
+                  color: AppTokens.textSecondary,
+                  fontSize: 13,
                 ),
               ),
             ),

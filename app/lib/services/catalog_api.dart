@@ -44,12 +44,15 @@ class CatalogApi {
     int page = 1,
     int pageSize = 30,
     String? q,
+    /// 探索横滑默认 true；更多二级列表传 false（全量，服务端仍把常规排前）
+    bool commonOnly = true,
   }) async {
     await ApiClient.ensureLocalNetworkAccess(baseUrl);
     final params = <String, String>{
       'category': category.apiValue,
       'page': '$page',
       'page_size': '$pageSize',
+      'common_only': commonOnly ? 'true' : 'false',
     };
     final query = (q ?? '').trim();
     if (query.isNotEmpty) params['q'] = query;

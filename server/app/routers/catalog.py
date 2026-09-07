@@ -82,11 +82,11 @@ async def list_catalog(
     q: Optional[str] = Query(None, description="可选：名称模糊搜索"),
     common_only: bool = Query(
         True,
-        description="默认只返回常规物种（探索用）；false 可含生僻 tropials",
+        description="默认只返回常规物种（探索首页用）；false=全量（更多列表），常规仍排在前面",
     ),
     db: Session = Depends(get_db),
 ) -> CatalogPage:
-    """按分类列出目录。探索/更多默认 common_only=true。"""
+    """按分类列出目录。探索横滑默认 common_only=true；更多二级页传 false。"""
     cat = category.value
     stmt = select(CatalogSpecies).where(CatalogSpecies.category == cat)
     count_stmt = select(func.count()).select_from(CatalogSpecies).where(
@@ -102,8 +102,10 @@ async def list_catalog(
         count_stmt = count_stmt.where(CatalogSpecies.name.like(like))
 
     total = int(db.scalar(count_stmt) or 0)
+    # 常规（is_common=1）始终在前，其后才是生僻 / 新种子；组内再按热度、分数、名称
     rows = db.scalars(
         stmt.order_by(
+            desc(CatalogSpecies.is_common),
             desc(CatalogSpecies.seen_count),
             desc(CatalogSpecies.best_score),
             CatalogSpecies.name,
