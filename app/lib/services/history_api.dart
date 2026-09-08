@@ -125,18 +125,37 @@ class HistoryApi {
   final String baseUrl;
 
   Uri _abs(String pathOrUrl) {
-    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-      return Uri.parse(pathOrUrl);
+    final raw = pathOrUrl.trim();
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      final uri = Uri.parse(raw);
+      // 历史里可能存了旧局域网 IP 的 /media/…，统一改写到当前 baseUrl
+      if (uri.path.startsWith('/media/')) {
+        final q = uri.hasQuery ? '?${uri.query}' : '';
+        return Uri.parse('$baseUrl${uri.path}$q');
+      }
+      return uri;
     }
-    if (pathOrUrl.startsWith('/')) {
-      return Uri.parse('$baseUrl$pathOrUrl');
+    if (raw.startsWith('/')) {
+      return Uri.parse('$baseUrl$raw');
     }
-    return Uri.parse('$baseUrl/$pathOrUrl');
+    return Uri.parse('$baseUrl/$raw');
   }
 
   String absoluteMediaUrl(String pathOrUrl) {
-    if (pathOrUrl.isEmpty) return '';
+    if (pathOrUrl.trim().isEmpty) return '';
     return _abs(pathOrUrl).toString();
+  }
+
+  /// 宝藏箱卡片：优先用户拍摄缩略图；无缩略图时回退百科/目录图。
+  String historyCardImageUrl({
+    required String thumbUrl,
+    required String imageUrl,
+  }) {
+    for (final raw in [thumbUrl, imageUrl]) {
+      final url = absoluteMediaUrl(raw);
+      if (url.isNotEmpty) return url;
+    }
+    return '';
   }
 
   Future<List<HistoryMonth>> fetchMonths(String token) async {

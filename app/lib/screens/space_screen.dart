@@ -299,10 +299,17 @@ class _LoggedInBodyState extends State<_LoggedInBody> {
               const SizedBox(height: 10),
               _MonthGrid(
                 items: _items[_months[i].yearMonth] ?? const [],
-                mediaBase: _api.baseUrl,
+                resolveImage: (item) => _api.historyCardImageUrl(
+                  thumbUrl: item.thumbUrl,
+                  imageUrl: item.imageUrl,
+                ),
                 onOpen: (item) {
-                  // 详情顶图用接口百科图；用户拍摄缩略图留给列表卡
-                  final apiImage = item.imageUrl.trim();
+                  // 详情顶图优先百科/目录图；无则回退缩略图
+                  final apiImage = _api.absoluteMediaUrl(item.imageUrl.trim());
+                  final thumbImage = _api.absoluteMediaUrl(item.thumbUrl.trim());
+                  final networkImage = apiImage.isNotEmpty
+                      ? apiImage
+                      : (thumbImage.isEmpty ? null : thumbImage);
                   final intro = item.description.trim().isNotEmpty
                       ? item.description.trim()
                       : (item.oneLiner.trim().isNotEmpty
@@ -314,7 +321,7 @@ class _LoggedInBodyState extends State<_LoggedInBody> {
                         name: item.name,
                         oneLiner: intro,
                         description: '关于「${item.name}」，我们以后会讲更多……',
-                        networkImage: apiImage.isEmpty ? null : apiImage,
+                        networkImage: networkImage,
                         category: item.category,
                         candidateId: '${item.id}',
                         baikeUrl: item.baikeUrl,
@@ -423,12 +430,12 @@ class _ProfileCard extends StatelessWidget {
 class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.items,
-    required this.mediaBase,
+    required this.resolveImage,
     required this.onOpen,
   });
 
   final List<HistoryItem> items;
-  final String mediaBase;
+  final String Function(HistoryItem item) resolveImage;
   final void Function(HistoryItem item) onOpen;
 
   @override
@@ -447,15 +454,10 @@ class _MonthGrid extends StatelessWidget {
       ),
       itemBuilder: (context, i) {
         final item = items[i];
-        // 本领宝藏箱卡片：只用用户拍摄缩略图（不用接口百科图）
-        final thumb = item.thumbUrl.isNotEmpty
-            ? (item.thumbUrl.startsWith('http')
-                ? item.thumbUrl
-                : '$mediaBase${item.thumbUrl}')
-            : '';
+        // 优先用户缩略图；探索记学等无缩略图时回退百科/目录图
         return _HistoryTile(
           name: item.name,
-          imageUrl: thumb,
+          imageUrl: resolveImage(item),
           onTap: () => onOpen(item),
         );
       },
