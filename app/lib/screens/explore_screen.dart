@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shitu_app/data/explore_mock.dart';
 import 'package:shitu_app/models/models.dart';
 import 'package:shitu_app/screens/detail_screen.dart';
+import 'package:shitu_app/screens/leaderboard_screen.dart';
 import 'package:shitu_app/screens/more_list_screen.dart';
 import 'package:shitu_app/services/api_client.dart';
 import 'package:shitu_app/services/catalog_api.dart';
@@ -144,6 +145,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
               '今天想认识谁？点开小卡片学一学～',
               style: TextStyle(color: AppTokens.textSecondary, fontSize: 15),
             ),
+            const SizedBox(height: 16),
+            const _LeaderboardEntryCard(),
             if (_loading) ...[
               const SizedBox(height: 16),
               const Center(
@@ -189,6 +192,129 @@ class _ExploreScreenState extends State<ExploreScreen> {
               items: _transport,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 对齐 Figma「入口-学习排行榜」(271:254)
+class _LeaderboardEntryCard extends StatelessWidget {
+  const _LeaderboardEntryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const LeaderboardScreen()),
+          );
+        },
+        child: Ink(
+          height: 84,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF4EC),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFFFCFB9)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 14, 0),
+            child: Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppTokens.primary,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Text('🏆', style: TextStyle(fontSize: 28)),
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '学习排行榜',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppTokens.textPrimary,
+                          height: 1.2,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '看看谁是学习小明星',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppTokens.textSecondary,
+                          height: 1.2,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        '总榜 / 周榜',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: AppTokens.primary,
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _Top20Badge(),
+                    SizedBox(height: 8),
+                    Text(
+                      '›',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w600,
+                        color: AppTokens.primary,
+                        height: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Top20Badge extends StatelessWidget {
+  const _Top20Badge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.78),
+        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+      ),
+      child: const Text(
+        'TOP 20',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: AppTokens.primary,
+          height: 1.2,
         ),
       ),
     );
@@ -438,7 +564,7 @@ class _ExploreCard extends StatelessWidget {
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
-                          errorBuilder: (_, __, ___) => Text(
+                          errorBuilder: (context, error, stackTrace) => Text(
                             item.emoji,
                             style: const TextStyle(fontSize: 42),
                           ),

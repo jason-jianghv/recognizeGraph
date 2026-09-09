@@ -10,6 +10,7 @@ from app.db.session import init_db, media_root
 from app.routers.auth import router as auth_router
 from app.routers.catalog import router as catalog_router
 from app.routers.history import router as history_router
+from app.routers.leaderboard import router as leaderboard_router
 from app.routers.me import router as me_router
 from app.routers.recognize import router as recognize_router
 from app.routers.name_en import router as name_en_router
@@ -68,6 +69,7 @@ app.include_router(catalog_router)
 app.include_router(auth_router)
 app.include_router(me_router)
 app.include_router(history_router)
+app.include_router(leaderboard_router)
 app.include_router(tts_router)
 app.include_router(name_en_router)
 

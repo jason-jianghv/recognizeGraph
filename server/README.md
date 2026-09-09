@@ -54,6 +54,23 @@ curl -X POST "http://127.0.0.1:8000/v1/recognize" \
 
 等级：按累计学习次数进阶（前期易升、后期变难），见 `app/auth/levels.py`；接口返回 `level` / `learns_to_next` / `level_hint`。缩略图：`/media/thumbs/...`
 
+## 学习排行榜（P-015）
+
+| 接口 | 说明 |
+|------|------|
+| `GET /v1/leaderboard?scope=total\|week&limit=20` | 前 N 名；可选 Bearer 填 `me`（未登录 `me` 为 null） |
+
+- **total**：按 `users.learn_count` 降序（与空间已学次数同源）
+- **week**：本**自然周**（上海时区周一 00:00～下周一 00:00）内 `learning_records` 条数；响应带 `week_start` / `week_end`（UTC ISO）
+- 名次为竞赛排名（同分同名次）；只展示次数 >0 的用户；`me.rank` 在 0 次时为「全体有记录者之后」
+- 条目字段：`rank` / `user_id` / `nickname` / `avatar_url` / `learn_count`（本榜指标）/ `level`（按用户累计总次数）
+
+```bash
+curl "http://127.0.0.1:8000/v1/leaderboard?scope=total"
+curl "http://127.0.0.1:8000/v1/leaderboard?scope=week" \
+  -H "Authorization: Bearer <token>"
+```
+
 ## 语音播报（详情页）
 
 方案：**短文本 + 实时 + 非流式 + 百度云**。超 1024 GBK 字节时服务端按标点分段合成，再拼接为一条 MP3。
